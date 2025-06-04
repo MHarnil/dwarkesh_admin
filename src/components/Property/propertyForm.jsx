@@ -1,3 +1,5 @@
+// src/pages/PropertyForm.jsx
+
 import React, { useState, useEffect } from 'react';
 import {
     Box,
@@ -15,6 +17,7 @@ import * as Yup from 'yup';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import axiosInstance from '../../../axiosInstance.js';
+import { useParams, useNavigate } from "react-router-dom";
 
 const initialValues = {
     title: '',
@@ -50,7 +53,7 @@ const validationSchema = Yup.object().shape({
     floorPlan: Yup.array().of(
         Yup.object().shape({
             title: Yup.string().required('Required'),
-            images: Yup.array().of(Yup.string().required('Image URL required'))
+            image: Yup.array().of(Yup.string().required('Image URL required'))
         })
     ),
     projectGallery: Yup.array().of(Yup.string().required('Image URL required'))
@@ -65,9 +68,14 @@ const uploadImage = async (file) => {
     });
 };
 
-const PropertyForm = ({ onSubmit }) => {
+const PropertyForm = () => {
     const [propertyTypes, setPropertyTypes] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [formInitialValues, setFormInitialValues] = useState(initialValues);
+    const [loadingForm, setLoadingForm] = useState(true);
+    const { id } = useParams();
+    const isEditMode = Boolean(id);
+    const navigate = useNavigate();
 
     const fetchPropertyTypes = async () => {
         try {
@@ -80,26 +88,83 @@ const PropertyForm = ({ onSubmit }) => {
         }
     };
 
+    const fetchPropertyById = async (id) => {
+        try {
+            const res = await axiosInstance.get(`/api/properties/${id}`);
+            const property = res.data;
+
+            setFormInitialValues({
+                title: property.title || '',
+                subtitle: property.subtitle || '',
+                propertyType: property.propertyType._id || '',
+                address: property.address || '',
+                contactNumber: property.contactNumber || '',
+                propertyDetail: {
+                    bhk: property.propertyDetail?.bhk || '',
+                    sqft: property.propertyDetail?.sqft || '',
+                    stutestype: property.propertyDetail?.stutestype || ''
+                },
+                floorPlan: property.floorPlan.length > 0 ? property.floorPlan : [{ title: '', images: [''] }],
+                projectGallery: property.projectGallery.length > 0 ? property.projectGallery : ['']
+            });
+        } catch (error) {
+            console.error('Error fetching property data', error);
+        } finally {
+            setLoadingForm(false);
+        }
+    };
+
+    const handleSubmit = async (values, { resetForm }) => {
+        try {
+            const payload = {
+                ...values,
+                propertyType: values.propertyType, // send just the ID
+            };
+
+            if (isEditMode) {
+                await axiosInstance.put(`/api/properties/${id}`, payload);
+                alert('Property updated successfully');
+            } else {
+                await axiosInstance.post('/api/properties', payload);
+                alert('Property added successfully');
+            }
+
+            resetForm();
+            navigate('/property-list'); // redirect to property list
+
+        } catch (err) {
+            console.error('Error saving property:', err);
+            alert('Something went wrong');
+        }
+    };
+
     useEffect(() => {
         fetchPropertyTypes();
-    }, []);
+        if (isEditMode) {
+            fetchPropertyById(id);
+        } else {
+            setLoadingForm(false);
+        }
+    }, [id]);
 
-    if (loading) return <CircularProgress sx={{ mt: 10 }} />;
+    if (loading || loadingForm) return <CircularProgress sx={{ mt: 10 }} />;
 
     return (
         <Container sx={{ mt: 20, mb: 5 }}>
             <Typography variant="h5" gutterBottom>
-                Add / Edit Property
+                {isEditMode ? 'Edit Property' : 'Add Property'}
             </Typography>
+
             <Formik
-                initialValues={initialValues}
+                initialValues={formInitialValues}
+                enableReinitialize
                 validationSchema={validationSchema}
-                onSubmit={onSubmit}
+                onSubmit={handleSubmit}
             >
                 {({ values, handleChange, setFieldValue, errors, touched }) => (
                     <Form>
                         <Grid container spacing={2}>
-                            <Grid item size={{xs:12, sm:6}}>
+                            <Grid item xs={12} sm={6}>
                                 <TextField
                                     fullWidth
                                     label="Title"
@@ -111,7 +176,7 @@ const PropertyForm = ({ onSubmit }) => {
                                 />
                             </Grid>
 
-                            <Grid item size={{xs:12, sm:6}}>
+                            <Grid item xs={12} sm={6}>
                                 <TextField
                                     fullWidth
                                     label="Subtitle"
@@ -121,7 +186,7 @@ const PropertyForm = ({ onSubmit }) => {
                                 />
                             </Grid>
 
-                            <Grid item size={{xs:12, sm:6}}>
+                            <Grid item xs={12} sm={6}>
                                 <TextField
                                     select
                                     fullWidth
@@ -132,7 +197,7 @@ const PropertyForm = ({ onSubmit }) => {
                                     error={touched.propertyType && !!errors.propertyType}
                                     helperText={touched.propertyType && errors.propertyType}
                                 >
-                                    {propertyTypes.map((type) => (
+                                    {propertyTypes?.map((type) => (
                                         <MenuItem key={type._id} value={type._id}>
                                             {type.name}
                                         </MenuItem>
@@ -140,7 +205,7 @@ const PropertyForm = ({ onSubmit }) => {
                                 </TextField>
                             </Grid>
 
-                            <Grid item size={{xs:12, sm:6}}>
+                            <Grid item xs={12} sm={6}>
                                 <TextField
                                     fullWidth
                                     label="Address"
@@ -152,7 +217,7 @@ const PropertyForm = ({ onSubmit }) => {
                                 />
                             </Grid>
 
-                            <Grid item size={{xs:12, sm:6}}>
+                            <Grid item xs={12} sm={6}>
                                 <TextField
                                     fullWidth
                                     label="Contact Number"
@@ -164,11 +229,10 @@ const PropertyForm = ({ onSubmit }) => {
                                 />
                             </Grid>
 
-                            {/* Property Detail */}
-                            <Grid item size={{xs:12}}>
+                            <Grid item xs={12}>
                                 <Typography variant="h6">Property Detail</Typography>
                             </Grid>
-                            <Grid item size={{xs:4}}>
+                            <Grid item xs={4}>
                                 <TextField
                                     fullWidth
                                     label="BHK"
@@ -177,7 +241,7 @@ const PropertyForm = ({ onSubmit }) => {
                                     onChange={handleChange}
                                 />
                             </Grid>
-                            <Grid item size={{xs:4}}>
+                            <Grid item xs={4}>
                                 <TextField
                                     fullWidth
                                     label="Sqft"
@@ -186,7 +250,7 @@ const PropertyForm = ({ onSubmit }) => {
                                     onChange={handleChange}
                                 />
                             </Grid>
-                            <Grid item size={{xs:4}}>
+                            <Grid item xs={4}>
                                 <TextField
                                     fullWidth
                                     label="Status Type"
@@ -196,8 +260,7 @@ const PropertyForm = ({ onSubmit }) => {
                                 />
                             </Grid>
 
-                            {/* Floor Plan */}
-                            <Grid item size={{xs:12}}>
+                            <Grid item xs={12}>
                                 <Typography variant="h6">Floor Plans</Typography>
                             </Grid>
                             <FieldArray name="floorPlan">
@@ -205,7 +268,7 @@ const PropertyForm = ({ onSubmit }) => {
                                     <>
                                         {values.floorPlan.map((plan, index) => (
                                             <Grid container spacing={2} key={index}>
-                                                <Grid item size={{xs:12}}>
+                                                <Grid item xs={12}>
                                                     <TextField
                                                         fullWidth
                                                         label="Floor Title"
@@ -219,7 +282,7 @@ const PropertyForm = ({ onSubmit }) => {
                                                     {({ push: pushImage, remove: removeImage }) => (
                                                         <>
                                                             {plan.images.map((img, imgIdx) => (
-                                                                <Grid item size={{xs:10}} key={imgIdx}>
+                                                                <Grid item xs={10} key={imgIdx}>
                                                                     <input
                                                                         type="file"
                                                                         accept="image/*"
@@ -239,7 +302,7 @@ const PropertyForm = ({ onSubmit }) => {
                                                         </>
                                                     )}
                                                 </FieldArray>
-                                                <Grid item size={{xs:2}}>
+                                                <Grid item xs={2}>
                                                     <IconButton onClick={() => remove(index)}>
                                                         <DeleteIcon />
                                                     </IconButton>
@@ -253,8 +316,7 @@ const PropertyForm = ({ onSubmit }) => {
                                 )}
                             </FieldArray>
 
-                            {/* Project Gallery */}
-                            <Grid item size={{xs:12}}>
+                            <Grid item xs={12}>
                                 <Typography variant="h6">Project Gallery</Typography>
                             </Grid>
                             <FieldArray name="projectGallery">
@@ -262,7 +324,7 @@ const PropertyForm = ({ onSubmit }) => {
                                     <>
                                         {values.projectGallery.map((img, index) => (
                                             <Grid container spacing={1} key={index}>
-                                                <Grid item size={{xs:10}}>
+                                                <Grid item xs={10}>
                                                     <input
                                                         type="file"
                                                         accept="image/*"
@@ -278,7 +340,7 @@ const PropertyForm = ({ onSubmit }) => {
                                                     />
                                                     {img && <img src={img} alt="gallery" width={100} style={{ marginTop: 8 }} />}
                                                 </Grid>
-                                                <Grid item size={{xs:2}}>
+                                                <Grid item xs={2}>
                                                     <IconButton onClick={() => remove(index)}>
                                                         <DeleteIcon />
                                                     </IconButton>
@@ -292,8 +354,7 @@ const PropertyForm = ({ onSubmit }) => {
                                 )}
                             </FieldArray>
 
-                            {/* Submit */}
-                            <Grid item size={{xs:12}}>
+                            <Grid item xs={12}>
                                 <Button variant="contained" type="submit" color="primary">
                                     Submit Property
                                 </Button>
