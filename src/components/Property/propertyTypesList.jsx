@@ -4,18 +4,13 @@ import {
     Button,
     Collapse,
     Container,
-    Dialog,
-    DialogTitle,
-    DialogContent,
     IconButton,
     Typography,
     Table,
     TableBody,
     TableCell,
-    TableContainer,
     TableHead,
     TableRow,
-    Paper,
     Grid
 } from '@mui/material';
 import {
@@ -26,7 +21,6 @@ import {
     Delete as DeleteIcon
 } from '@mui/icons-material';
 import { useNavigate } from "react-router-dom";
-import PropertyForm from './PropertyForm';
 import axiosInstance from '../../../axiosInstance';
 
 const PropertyTypesList = () => {
@@ -82,7 +76,7 @@ const PropertyTypesList = () => {
                         </TableRow>
                     </TableHead>
                     <TableBody>
-                        {properties.map((prop) => (
+                        {properties?.map((prop) => (
                             <React.Fragment key={prop._id}>
                                 <TableRow>
                                     <TableCell>{prop.title}</TableCell>
@@ -107,7 +101,6 @@ const PropertyTypesList = () => {
                                     <TableCell colSpan={5} sx={{ paddingBottom: 0, paddingTop: 0 }}>
                                         <Collapse in={expandedRow === prop._id} timeout="auto" unmountOnExit>
                                             <Box sx={{ margin: 2 }}>
-                                                {/* Basic Info */}
                                                 <Typography variant="h6" sx={{fontSize:'20px',fontWeight:'500'}}>Basic Info</Typography>
                                                 <Grid container spacing={2}>
                                                     <Grid item xs={6}>
@@ -129,43 +122,51 @@ const PropertyTypesList = () => {
                                                     </Grid>
                                                 </Grid>
 
-                                                {/* Property Details */}
                                                 <Typography variant="h6" sx={{fontSize:'20px',fontWeight:'500',mt:3}}>Property Detail</Typography>
                                                 <Grid container spacing={2}>
-                                                    <Grid item xs={4}>
-                                                        <Typography><strong>BHK:</strong> {prop.propertyDetail?.bhk}</Typography>
-                                                    </Grid>
-                                                    <Grid item xs={4}>
+                                                    {/* BHK - only show for residential properties */}
+                                                    {(() => {
+                                                        const isResidential = prop.propertyType?.name?.toLowerCase().includes('residential');
+                                                        return isResidential && (
+                                                            <Grid item xs={prop.propertyDetail?.bhk ? 4 : 0}>
+                                                                <Typography><strong>BHK:</strong> {prop.propertyDetail?.bhk}</Typography>
+                                                            </Grid>
+                                                        );
+                                                    })()}
+
+                                                    <Grid item xs={(() => {
+                                                        const isResidential = prop.propertyType?.name?.toLowerCase().includes('residential');
+                                                        return isResidential ? 4 : 6;
+                                                    })()}>
                                                         <Typography><strong>Sqft:</strong> {prop.propertyDetail?.sqft}</Typography>
                                                     </Grid>
-                                                    <Grid item xs={4}>
+
+                                                    <Grid item xs={(() => {
+                                                        const isResidential = prop.propertyType?.name?.toLowerCase().includes('residential');
+                                                        return isResidential ? 4 : 6;
+                                                    })()}>
                                                         <Typography><strong>Status:</strong> {prop.propertyDetail?.stutestype}</Typography>
                                                     </Grid>
                                                 </Grid>
 
-                                                {/* Floor Plan */}
                                                 <Typography variant="h6" sx={{fontSize:'20px',fontWeight:'500',mt:3}}>Floor Plan</Typography>
                                                 <Box display="flex" flexWrap="wrap" gap={1}>
                                                 {prop.floorPlan?.map((floor) => (
                                                     <Box key={floor._id} mb={2}>
                                                         <Box display="flex" flexWrap="wrap" gap={1}>
-                                                            {floor.images?.map((img, idx) => (
                                                                 <img
-                                                                    key={idx}
-                                                                    src={img}
+                                                                    src={floor?.image}
                                                                     alt="floor"
                                                                     width={120}
                                                                     height={80}
                                                                     style={{ objectFit: 'cover', borderRadius: 4 }}
                                                                 />
-                                                            ))}
                                                         </Box>
                                                         <Typography><strong>{floor.title}</strong></Typography>
                                                     </Box>
                                                 ))}
                                                 </Box>
 
-                                                {/* Project Gallery */}
                                                 <Typography variant="h6" sx={{fontSize:'20px',fontWeight:'500',mt:3}}>Project Gallery</Typography>
                                                 <Box display="flex" flexWrap="wrap" gap={1}>
                                                     {prop.projectGallery?.map((img, idx) => (

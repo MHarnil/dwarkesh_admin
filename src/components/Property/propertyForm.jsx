@@ -1,5 +1,3 @@
-// src/pages/PropertyForm.jsx
-
 import React, { useState, useEffect } from 'react';
 import {
     Box,
@@ -53,7 +51,7 @@ const initialValues = {
     floorPlan: [
         {
             title: '',
-            images: ['']
+            images: ''
         }
     ],
     projectGallery: ['']
@@ -66,17 +64,23 @@ const validationSchema = Yup.object().shape({
     address: Yup.string().required('Required'),
     contactNumber: Yup.string().required('Required'),
     propertyDetail: Yup.object().shape({
-        bhk: Yup.number().required('Required'),
+        bhk: Yup.number().when('propertyType', {
+            is: (val) => {
+                return val && val.toLowerCase && val.toLowerCase().includes('residential');
+            },
+            then: () => Yup.number().required('Required'),
+            otherwise: () => Yup.number()
+        }),
         sqft: Yup.number().required('Required'),
         stutestype: Yup.string().required('Required')
     }),
     floorPlan: Yup.array().of(
         Yup.object().shape({
-            title: Yup.string().required('Required'),
-            images: Yup.array().of(Yup.string().required('Image URL required'))
+            title: Yup.string().required('Floor title is required'),
+            image: Yup.mixed().required('Floor plan image is required')
         })
     ),
-    projectGallery: Yup.array().of(Yup.string().required('Image URL required'))
+    projectGallery: Yup.array().of(Yup.mixed().required('Gallery image is required'))
 });
 
 const uploadImage = async (file) => {
@@ -118,7 +122,7 @@ const PropertyForm = () => {
             setFormInitialValues({
                 title: property.title || '',
                 subtitle: property.subtitle || '',
-                propertyType: property.propertyType?._id || '',
+                propertyType: property.propertyType?._id || property.propertyType || '',
                 address: property.address || '',
                 contactNumber: property.contactNumber || '',
                 propertyDetail: {
@@ -126,7 +130,12 @@ const PropertyForm = () => {
                     sqft: property.propertyDetail?.sqft || '',
                     stutestype: property.propertyDetail?.stutestype || ''
                 },
-                floorPlan: property.floorPlan?.length > 0 ? property.floorPlan : [{ title: '', images: [''] }],
+                floorPlan: property.floorPlan?.length > 0
+                    ? property.floorPlan.map(plan => ({
+                        title: plan.title || '',
+                        image: plan.image || ''
+                    }))
+                    : [{ title: '', image: '' }],
                 projectGallery: property.projectGallery?.length > 0 ? property.projectGallery : ['']
             });
         } catch (error) {
@@ -141,14 +150,12 @@ const PropertyForm = () => {
         try {
             const formData = new FormData();
 
-            // Basic fields
             formData.append('title', values.title || '');
             formData.append('subtitle', values.subtitle || '');
             formData.append('propertyType', values.propertyType || '');
             formData.append('address', values.address || '');
             formData.append('contactNumber', values.contactNumber || '');
 
-            // Property details as JSON string
             const propertyDetail = {
                 bhk: values.propertyDetail.bhk || 0,
                 sqft: values.propertyDetail.sqft || 0,
@@ -161,10 +168,9 @@ const PropertyForm = () => {
             }));
             formData.append('floorPlanTitles', JSON.stringify(floorPlanTitles));
 
-            // Floor Plans
             for (let index = 0; index < values.floorPlan.length; index++) {
                 const plan = values.floorPlan[index];
-                const imgSrc = plan.images?.[0];
+                const imgSrc = plan.image;
 
                 if (imgSrc) {
                     if (typeof imgSrc === 'string' && imgSrc.startsWith('blob:')) {
@@ -173,39 +179,57 @@ const PropertyForm = () => {
                         formData.append(`floorPlan_${index}`, file);
                     } else if (imgSrc instanceof File) {
                         formData.append(`floorPlan_${index}`, imgSrc);
+                    } else if (typeof imgSrc === 'string' && !imgSrc.startsWith('blob:')) {
+                        formData.append(`floorPlan_${index}_existing`, imgSrc);
                     }
                 }
             }
 
-            // Project gallery (multiple images)
             for (let index = 0; index < (values.projectGallery || []).length; index++) {
                 const img = values.projectGallery[index];
-                if (typeof img === 'string' && img.startsWith('blob:')) {
-                    const blob = await fetch(img).then(res => res.blob());
-                    const file = new File([blob], `projectGallery_${index}.jpg`, { type: blob.type });
-                    formData.append('projectGallery', file);
-                } else if (img instanceof File) {
-                    formData.append('projectGallery', img);
+                if (img) {
+                    if (typeof img === 'string' && img.startsWith('blob:')) {
+                        const blob = await fetch(img).then(res => res.blob());
+                        const file = new File([blob], `projectGallery_${index}.jpg`, { type: blob.type });
+                        formData.append('projectGallery', file);
+                    } else if (img instanceof File) {
+                        formData.append('projectGallery', img);
+                    } else if (typeof img === 'string' && !img.startsWith('blob:')) {
+                        formData.append('projectGallery_existing', img);
+                    }
                 }
             }
 
-            console.log('Submitting FormData:', [...formData.entries()]);
+            console.log('Submitting FormData:');
+            for (let pair of formData.entries()) {
+                console.log(pair[0], pair[1]);
+            }
 
             let response;
             if (isEditMode) {
-                response = await axiosInstance.put(`/api/properties/${id}`, formData);
+                response = await axiosInstance.put(`/api/properties/${id}`, formData, {
+                    headers: {
+                        'Content-Type': 'multipart/form-data',
+                    },
+                });
                 alert('Property updated successfully');
             } else {
-                response = await axiosInstance.post('/api/properties', formData);
+                response = await axiosInstance.post('/api/properties', formData, {
+                    headers: {
+                        'Content-Type': 'multipart/form-data',
+                    },
+                });
                 alert('Property added successfully');
             }
 
+            console.log('Response:', response.data);
             resetForm();
             navigate('/property');
 
         } catch (err) {
             console.error('Error saving property:', err.response?.data || err.message);
-            alert('Something went wrong');
+            const errorMessage = err.response?.data?.message || 'Something went wrong while saving the property';
+            alert(errorMessage);
         } finally {
             setIsSubmitting(false);
         }
@@ -234,10 +258,9 @@ const PropertyForm = () => {
     }
 
     return (
-        <Container maxWidth="lg" sx={{ py: 4 }}>
+        <Container sx={{ mt: 20, mb: 5 }}>
             <Fade in timeout={800}>
                 <Box>
-                    {/* Header Section */}
                     <Paper
                         elevation={0}
                         sx={{
@@ -286,7 +309,6 @@ const PropertyForm = () => {
                         {({ values, handleChange, setFieldValue, errors, touched }) => (
                             <Form>
                                 <Grid container spacing={3}>
-                                    {/* Basic Information Card */}
                                     <Grid item xs={12}>
                                         <Card elevation={2} sx={{ borderRadius: 3 }}>
                                             <CardHeader
@@ -301,7 +323,7 @@ const PropertyForm = () => {
                                             <Divider />
                                             <CardContent sx={{ p: 3 }}>
                                                 <Grid container spacing={3}>
-                                                    <Grid item xs={12} md={6}>
+                                                    <Grid item size={{xs:12, md:6}}>
                                                         <TextField
                                                             fullWidth
                                                             label="Property Title"
@@ -317,7 +339,7 @@ const PropertyForm = () => {
                                                         />
                                                     </Grid>
 
-                                                    <Grid item xs={12} md={6}>
+                                                    <Grid item size={{xs:12, md:6}}>
                                                         <TextField
                                                             fullWidth
                                                             label="Subtitle"
@@ -328,7 +350,7 @@ const PropertyForm = () => {
                                                         />
                                                     </Grid>
 
-                                                    <Grid item xs={12} md={6}>
+                                                    <Grid item size={{xs:12, md:6}}>
                                                         <TextField
                                                             select
                                                             fullWidth
@@ -348,7 +370,7 @@ const PropertyForm = () => {
                                                         </TextField>
                                                     </Grid>
 
-                                                    <Grid item xs={12} md={6}>
+                                                    <Grid item size={{xs:12, md:6}}>
                                                         <TextField
                                                             fullWidth
                                                             label="Contact Number"
@@ -364,7 +386,7 @@ const PropertyForm = () => {
                                                         />
                                                     </Grid>
 
-                                                    <Grid item xs={12}>
+                                                    <Grid item size={{xs:12}}>
                                                         <TextField
                                                             fullWidth
                                                             label="Address"
@@ -386,8 +408,7 @@ const PropertyForm = () => {
                                         </Card>
                                     </Grid>
 
-                                    {/* Property Details Card */}
-                                    <Grid item xs={12}>
+                                    <Grid item size={{xs:12}}>
                                         <Card elevation={2} sx={{ borderRadius: 3 }}>
                                             <CardHeader
                                                 avatar={
@@ -401,20 +422,32 @@ const PropertyForm = () => {
                                             <Divider />
                                             <CardContent sx={{ p: 3 }}>
                                                 <Grid container spacing={3}>
-                                                    <Grid item xs={12} sm={4}>
-                                                        <TextField
-                                                            fullWidth
-                                                            label="BHK"
-                                                            name="propertyDetail.bhk"
-                                                            value={values.propertyDetail.bhk}
-                                                            onChange={handleChange}
-                                                            type="number"
-                                                            variant="outlined"
-                                                            error={touched.propertyDetail?.bhk && !!errors.propertyDetail?.bhk}
-                                                            helperText={touched.propertyDetail?.bhk && errors.propertyDetail?.bhk}
-                                                        />
-                                                    </Grid>
-                                                    <Grid item xs={12} sm={4}>
+                                                    {(() => {
+                                                        const selectedPropertyType = propertyTypes.find(type => type._id === values.propertyType);
+                                                        const isResidential = selectedPropertyType?.name?.toLowerCase().includes('residential');
+
+                                                        return isResidential && (
+                                                            <Grid item size={{xs:12, sm:4}}>
+                                                                <TextField
+                                                                    fullWidth
+                                                                    label="BHK"
+                                                                    name="propertyDetail.bhk"
+                                                                    value={values.propertyDetail.bhk}
+                                                                    onChange={handleChange}
+                                                                    type="number"
+                                                                    variant="outlined"
+                                                                    error={touched.propertyDetail?.bhk && !!errors.propertyDetail?.bhk}
+                                                                    helperText={touched.propertyDetail?.bhk && errors.propertyDetail?.bhk}
+                                                                />
+                                                            </Grid>
+                                                        );
+                                                    })()}
+
+                                                    <Grid item size={{xs:12, sm: (() => {
+                                                            const selectedPropertyType = propertyTypes.find(type => type._id === values.propertyType);
+                                                            const isResidential = selectedPropertyType?.name?.toLowerCase().includes('residential');
+                                                            return isResidential ? 4 : 6;
+                                                        })()}}>
                                                         <TextField
                                                             fullWidth
                                                             label="Square Feet"
@@ -427,7 +460,12 @@ const PropertyForm = () => {
                                                             helperText={touched.propertyDetail?.sqft && errors.propertyDetail?.sqft}
                                                         />
                                                     </Grid>
-                                                    <Grid item xs={12} sm={4}>
+
+                                                    <Grid item size={{xs:12, sm: (() => {
+                                                            const selectedPropertyType = propertyTypes.find(type => type._id === values.propertyType);
+                                                            const isResidential = selectedPropertyType?.name?.toLowerCase().includes('residential');
+                                                            return isResidential ? 4 : 6;
+                                                        })()}}>
                                                         <TextField
                                                             fullWidth
                                                             label="Status Type"
@@ -444,8 +482,7 @@ const PropertyForm = () => {
                                         </Card>
                                     </Grid>
 
-                                    {/* Floor Plans Card */}
-                                    <Grid item xs={12}>
+                                    <Grid item size={{xs:12}}>
                                         <Card elevation={2} sx={{ borderRadius: 3 }}>
                                             <CardHeader
                                                 avatar={
@@ -454,7 +491,7 @@ const PropertyForm = () => {
                                                     </Avatar>
                                                 }
                                                 title="Floor Plans"
-                                                subheader="Upload floor plan images"
+                                                subheader="Upload floor plan images with titles"
                                                 action={
                                                     <Chip
                                                         label={`${values.floorPlan.length} Plan${values.floorPlan.length !== 1 ? 's' : ''}`}
@@ -487,6 +524,7 @@ const PropertyForm = () => {
                                                                                 onClick={() => remove(index)}
                                                                                 color="error"
                                                                                 size="small"
+                                                                                title="Delete this floor plan"
                                                                             >
                                                                                 <DeleteIcon />
                                                                             </IconButton>
@@ -494,7 +532,7 @@ const PropertyForm = () => {
                                                                     </Stack>
 
                                                                     <Grid container spacing={2}>
-                                                                        <Grid item xs={12} md={6}>
+                                                                        <Grid item size={{xs:12, md:6}}>
                                                                             <TextField
                                                                                 fullWidth
                                                                                 label="Floor Title"
@@ -502,9 +540,12 @@ const PropertyForm = () => {
                                                                                 value={plan.title}
                                                                                 onChange={handleChange}
                                                                                 variant="outlined"
+                                                                                error={touched.floorPlan?.[index]?.title && !!errors.floorPlan?.[index]?.title}
+                                                                                helperText={touched.floorPlan?.[index]?.title && errors.floorPlan?.[index]?.title}
+                                                                                placeholder="e.g., Ground Floor, First Floor"
                                                                             />
                                                                         </Grid>
-                                                                        <Grid item xs={12} md={6}>
+                                                                        <Grid item size={{xs:12, md:6}}>
                                                                             <Box
                                                                                 sx={{
                                                                                     border: `2px dashed ${theme.palette.divider}`,
@@ -512,6 +553,10 @@ const PropertyForm = () => {
                                                                                     p: 2,
                                                                                     textAlign: 'center',
                                                                                     cursor: 'pointer',
+                                                                                    minHeight: 120,
+                                                                                    display: 'flex',
+                                                                                    alignItems: 'center',
+                                                                                    justifyContent: 'center',
                                                                                     '&:hover': {
                                                                                         borderColor: theme.palette.primary.main,
                                                                                         bgcolor: alpha(theme.palette.primary.main, 0.04)
@@ -526,35 +571,58 @@ const PropertyForm = () => {
                                                                                     onChange={async (e) => {
                                                                                         const file = e.target.files[0];
                                                                                         if (file) {
-                                                                                            const url = await uploadImage(file);
-                                                                                            const updatedImages = [...plan.images];
-                                                                                            updatedImages[0] = url;
-                                                                                            setFieldValue(`floorPlan[${index}].images`, updatedImages);
+                                                                                            if (file.size > 5 * 1024 * 1024) {
+                                                                                                alert('File size should be less than 5MB');
+                                                                                                return;
+                                                                                            }
+
+                                                                                            const url = URL.createObjectURL(file);
+                                                                                            setFieldValue(`floorPlan[${index}].image`, file);
                                                                                         }
                                                                                     }}
                                                                                 />
-                                                                                <label htmlFor={`floor-plan-${index}`}>
-                                                                                    <Stack alignItems="center" spacing={1}>
-                                                                                        <CloudUploadIcon color="primary" fontSize="large" />
-                                                                                        <Typography variant="body2" color="text.secondary">
-                                                                                            Click to upload floor plan
-                                                                                        </Typography>
-                                                                                    </Stack>
+                                                                                <label htmlFor={`floor-plan-${index}`} style={{ cursor: 'pointer', width: '100%' }}>
+                                                                                    {plan.image ? (
+                                                                                        <Box>
+                                                                                            <img
+                                                                                                src={
+                                                                                                    plan.image instanceof File
+                                                                                                        ? URL.createObjectURL(plan.image)
+                                                                                                        : typeof plan.image === 'string' && plan.image.startsWith('blob:')
+                                                                                                            ? plan.image
+                                                                                                            : plan.image
+                                                                                                }
+                                                                                                alt="floor plan preview"
+                                                                                                style={{
+                                                                                                    width: '100%',
+                                                                                                    maxWidth: 200,
+                                                                                                    height: 120,
+                                                                                                    objectFit: 'cover',
+                                                                                                    borderRadius: 8
+                                                                                                }}
+                                                                                                onError={(e) => {
+                                                                                                    console.error('Image failed to load:', plan.image);
+                                                                                                    e.target.style.display = 'none';
+                                                                                                }}
+                                                                                            />
+                                                                                            <Typography variant="caption" color="text.secondary" display="block" mt={1}>
+                                                                                                Click to change image
+                                                                                            </Typography>
+                                                                                        </Box>
+                                                                                    ) : (
+                                                                                        <Stack alignItems="center" spacing={1}>
+                                                                                            <CloudUploadIcon color="primary" fontSize="large" />
+                                                                                            <Typography variant="body2" color="text.secondary">
+                                                                                                Click to upload floor plan
+                                                                                            </Typography>
+                                                                                        </Stack>
+                                                                                    )}
                                                                                 </label>
                                                                             </Box>
-                                                                            {plan.images[0] && (
-                                                                                <Box mt={2}>
-                                                                                    <img
-                                                                                        src={plan.images[0]}
-                                                                                        alt="floor plan"
-                                                                                        style={{
-                                                                                            width: '100%',
-                                                                                            maxWidth: 200,
-                                                                                            height: 'auto',
-                                                                                            borderRadius: 8
-                                                                                        }}
-                                                                                    />
-                                                                                </Box>
+                                                                            {touched.floorPlan?.[index]?.image && errors.floorPlan?.[index]?.image && (
+                                                                                <Typography variant="caption" color="error" sx={{ mt: 1, display: 'block' }}>
+                                                                                    {errors.floorPlan[index].image}
+                                                                                </Typography>
                                                                             )}
                                                                         </Grid>
                                                                     </Grid>
@@ -562,7 +630,7 @@ const PropertyForm = () => {
                                                             ))}
 
                                                             <Button
-                                                                onClick={() => push({ title: '', images: [''] })}
+                                                                onClick={() => push({ title: '', image: '' })}
                                                                 startIcon={<AddIcon />}
                                                                 variant="outlined"
                                                                 size="large"
@@ -577,8 +645,7 @@ const PropertyForm = () => {
                                         </Card>
                                     </Grid>
 
-                                    {/* Project Gallery Card */}
-                                    <Grid item xs={12}>
+                                    <Grid item size={{xs:12}}>
                                         <Card elevation={2} sx={{ borderRadius: 3 }}>
                                             <CardHeader
                                                 avatar={
@@ -704,8 +771,7 @@ const PropertyForm = () => {
                                         </Card>
                                     </Grid>
 
-                                    {/* Submit Button */}
-                                    <Grid item xs={12}>
+                                    <Grid item size={{xs:12}}>
                                         <Paper
                                             elevation={0}
                                             sx={{
