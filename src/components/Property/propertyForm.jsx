@@ -1,26 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import {
-    Box,
-    Button,
-    Grid,
-    MenuItem,
-    TextField,
-    Typography,
-    IconButton,
-    Container,
-    CircularProgress,
-    Paper,
-    Card,
-    CardContent,
-    CardHeader,
-    Divider,
-    Stack,
-    Chip,
-    Avatar,
-    Fade,
-    useTheme,
-    alpha
-} from '@mui/material';
+import {Box, Button, Grid, MenuItem, TextField, Typography, IconButton, Container, CircularProgress, Paper, Card, CardContent, CardHeader, Divider, Stack, Chip, Avatar, Fade, useTheme, alpha} from '@mui/material';
 import { FieldArray, Formik, Form } from 'formik';
 import * as Yup from 'yup';
 import AddIcon from '@mui/icons-material/Add';
@@ -59,7 +38,7 @@ const initialValues = {
 
 const validationSchema = Yup.object().shape({
     title: Yup.string().required('Required'),
-    subtitle: Yup.string(),
+    subtitle: Yup.string().required('Required'),
     propertyType: Yup.string().required('Required'),
     address: Yup.string().required('Required'),
     contactNumber: Yup.string().required('Required'),
@@ -347,6 +326,8 @@ const PropertyForm = () => {
                                                             value={values.subtitle}
                                                             onChange={handleChange}
                                                             variant="outlined"
+                                                            error={touched.subtitle && !!errors.subtitle}
+                                                            helperText={touched.subtitle && errors.subtitle}
                                                         />
                                                     </Grid>
 
@@ -790,7 +771,7 @@ const PropertyForm = () => {
                                                 sx={{
                                                     px: 6,
                                                     py: 1.5,
-                                                    borderRadius: 2,
+                                                    borderRadius: 0,
                                                     textTransform: 'none',
                                                     fontSize: '1.1rem',
                                                     fontWeight: 600
